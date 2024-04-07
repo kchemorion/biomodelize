@@ -1,7 +1,3 @@
-Sure, here's a README.md template that explains what the code does and how to use it:
-
----
-
 # SBML Simulation Wrapper
 
 This is a web application for simulating Systems Biology Markup Language (SBML) models using the RoadRunner simulation engine. It allows users to upload SBML files, run simulations, visualize simulation results, and download simulation data.
