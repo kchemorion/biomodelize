@@ -47,12 +47,12 @@
             <li class="tab"><a href="#compartments">Compartments</a></li>
             <li class="tab"><a href="#reactions">Reactions</a></li>
             <li class="tab"><a href="#parameters">Parameters</a></li>
+            <li class="tab"><a href="#api_doc">API Documentation</a></li>
         </ul>
         <div id="loader"></div>
         <div class="row">
             <div id="model_overview" class="col s12">
                 <!-- Content for Model Overview -->
-
                 <p>Model ID: {{ model_data.model_id }}</p>
                 <p>Model Name: {{ model_data.model_name }}</p>
                 <p>Number of Compartments: {{ model_data.num_compartments }}</p>
@@ -60,7 +60,6 @@
             </div>
             <div id="metadata" class="col s12">
                 <!-- Content for Metadata -->
-
                 <ul class="collapsible">
                     <li>
                         <div class="collapsible-body">
@@ -73,14 +72,13 @@
             </div>
             <div id="unit_definitions" class="col s12">
                 <!-- Content for List of Unit Definitions -->
-
                 <table>
                     <thead>
                         <tr>
                             <th>ID</th>
                             <th>Name</th>
                             <th>Metaid</th>
-                            <th>List of Units</th>
+                            <th>Units</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -97,7 +95,6 @@
             </div>
             <div id="compartments" class="col s12">
                 <!-- Content for Compartments -->
- 
                 <table>
                     <thead>
                         <tr>
@@ -119,7 +116,6 @@
             </div>
             <div id="reactions" class="col s12">
                 <!-- Content for Reactions -->
-
                 <table>
                     <thead>
                         <tr>
@@ -147,7 +143,6 @@
             </div>
             <div id="parameters" class="col s12">
                 <!-- Content for Parameters -->
-
                 <form id="update_parameters_form" method="post">
                     {% csrf_token %}
                     <table>
@@ -197,111 +192,17 @@
                         <h4>Simulation Results</h4>
                         <div id="plot-container"></div> 
                         <div id="simulation-results"></div>
-                        <!-- Add this line for the plot container -->
                         <a id="download-results" href="#" download>Download Results</a>
                     </div>
                 </div>
-                
-
-                <script>
-                    document.getElementById("update_parameters_form").addEventListener("submit", function(event) {
-                        event.preventDefault(); // Prevent default form submission
-                    
-                        // Serialize form data
-                        var formData = new FormData(this);
-                    
-                        // Send AJAX request to update parameters
-                        fetch("{% url 'update_parameters' %}", {
-                            method: "POST",
-                            body: formData
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                alert(data.message); // Show success message
-                            } else {
-                                alert("Error: " + data.message); // Show error message
-                            }
-                        })
-                        .catch(error => {
-                            console.error("Error:", error);
-                            alert("An error occurred while updating parameters.");
-                        });
-                    });
-                    
-                    document.getElementById("simulate_button").addEventListener("click", function() {
-    // Display loader
-    document.getElementById("loader").style.display = "block";
-
-    // Get simulation parameters from user input
-    var simulationParameters = {
-        start: 0,
-        end: 2000,
-        steps: 200
-    };
-
-    // Add your simulation logic here
-    fetch("{% url 'run_simulation' %}", {
-        method: "POST",
-        headers: {
-            "X-CSRFToken": getCookie("csrftoken")  // Include CSRF token
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Hide loader after simulation is done
-            document.getElementById("loader").style.display = "none";
-
-            // Display simulation results
-            document.getElementById("simulation-results").innerHTML = JSON.stringify(data.simulation_data);
-
-            // Display the plot image
-            var plotImage = document.createElement("img");
-            // Construct the URL for the plot image saved in the media folder
-            plotImage.src = "/media/" + data.plot_url.split("/").pop();  // Remove any leading slashes
-            document.getElementById("plot-container").appendChild(plotImage);
-
-            // Update download link
-            var downloadLink = document.getElementById("download-results");
-            downloadLink.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data.simulation_data));
-
-            // Initialize modal
-            var modalElem = document.getElementById("simulation-modal");
-            var modalInstance = M.Modal.init(modalElem);
-            // Open modal after initializing
-            modalInstance.open();
-        } else {
-            console.error("Error:", data.message);
-            alert("An error occurred while running the simulation.");
-        }
-    })
-    .catch(error => {
-        console.error("Error:", error);
-        alert("An error occurred while running the simulation.");
-    });
-});
-
-
-
-        // Function to get CSRF token from cookies
-        function getCookie(name) {
-            var cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                var cookies = document.cookie.split(';');
-                for (var i = 0; i < cookies.length; i++) {
-                    var cookie = cookies[i].trim();
-                    // Check if the cookie contains the CSRF token
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
-        }
-
-                </script>
+            </div>
+            <div id="api_doc" class="col s12">
+                <!-- Content for API Documentation -->
+                <h5>API Documentation</h5>
+                <p>Here you can find the documentation for the API endpoints:</p>
+                <!-- Add your API documentation content here -->
+                <p>Endpoint 1: /run_simulation/ - This endpoint runs a simulation of the SBML model.</p>
+                <p>Endpoint 2: /update_parameters/ - This endpoint updates the parameters of the SBML model.</p>
             </div>
         </div>
     </div>
@@ -323,15 +224,110 @@
                 processEnvironments: true
             }
         });
-    </script>
-    <script>
-        // Initialize collapsible elements
-        document.addEventListener('DOMContentLoaded', function() {
-            var collapsibles = document.querySelectorAll('.collapsible');
-            M.Collapsible.init(collapsibles);
+
+        // Event listener for the "Run Simulation" button
+  // Event listener for the "Run Simulation" button
+  document.getElementById("simulate_button").addEventListener("click", function() {
+    // Display loader
+    document.getElementById("loader").style.display = "block";
+
+    // Fetch CSRF token
+    var csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    // Send AJAX request to run simulation
+    fetch("/run_simulation/", {  // Update the URL to match your endpoint
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrftoken
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Hide loader
+        document.getElementById("loader").style.display = "none";
+
+        if (data.success) {
+            // Simulation ran successfully, display results
+            document.getElementById("simulation-results").innerHTML = "<h5>Simulation Results</h5>";
+            document.getElementById("simulation-results").innerHTML += "<p>Simulation data:</p>";
+            document.getElementById("simulation-results").innerHTML += "<pre>" + JSON.stringify(data.simulation_data, null, 2) + "</pre>";
+            document.getElementById("simulation-results").innerHTML += "<p>Plot:</p>";
+            document.getElementById("plot-container").innerHTML = "<img src='" + data.plot_url + "' alt='Simulation Plot'>";
+            
+            // Create a blob containing the simulation data
+            var blob = new Blob([JSON.stringify(data.simulation_data)], { type: "application/json" });
+            var url = URL.createObjectURL(blob);
+            
+            // Update download link to download the JSON file
+            var downloadLink = document.getElementById("download-results");
+            downloadLink.setAttribute("href", url);
+            downloadLink.setAttribute("download", "simulation_results.json");
+            downloadLink.style.display = "block";
+        } else {
+            // Simulation failed, display error message
+            alert("Simulation failed: " + data.message);
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        alert("An error occurred while running the simulation.");
+    });
+});
+
+
+document.addEventListener('DOMContentLoaded', function() {
+    var modals = document.querySelectorAll('.modal');
+    M.Modal.init(modals);
+});
+
+
+        // Event listener for the "Update Parameters" form
+        document.getElementById("update_parameters_form").addEventListener("submit", function(event) {
+            event.preventDefault(); // Prevent the default form submission
+
+            // Display loader
+            document.getElementById("loader").style.display = "block";
+
+            // Fetch CSRF token
+            var csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            // Prepare parameters data from form inputs
+            var parametersData = {};
+            var formElements = this.elements;
+            for (var i = 0; i < formElements.length; i++) {
+                if (formElements[i].tagName === 'INPUT' && formElements[i].value.trim() !== '') {
+                    parametersData[formElements[i].name] = parseFloat(formElements[i].value); // Convert value to float
+                }
+            }
+
+            // Send AJAX request to update parameters
+            fetch("{% url 'update_parameters' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken
+                },
+                body: JSON.stringify(parametersData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide loader
+                document.getElementById("loader").style.display = "none";
+                
+                // Check if parameters were successfully updated
+                if (data.success) {
+                    alert("Parameters updated successfully!");
+                } else {
+                    console.error("Error:", data.message);
+                    alert("An error occurred while updating parameters.");
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("An error occurred while updating parameters.");
+            });
         });
     </script>
-    
-
 </body>
 </html>

@@ -1,19 +1,21 @@
-from django.http import HttpResponseRedirect
-from django.urls import reverse
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.conf import settings
+from django.templatetags.static import static
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 import libsbml
 import os
 import glob
-import libsbml
-from django.shortcuts import render
-from django.http import JsonResponse
 import roadrunner
 import matplotlib.pyplot as plt
 import tempfile
 import uuid
+import xml.etree.ElementTree as ET
 from django.conf import settings
-from django.templatetags.static import static 
 
-
+# Define model classes (Compartment, Species, Reaction, UnitDefinition, Parameter, Event)
 class Compartment:
     def __init__(self, id, name, size):
         self.id = id
@@ -30,7 +32,6 @@ class Species:
         self.initial_value = initial_value
         self.compartment = compartment
         self.charge = charge
-
 
 class Reaction:
     def __init__(self, id, name, metaid, reactants, products, modifiers, math):
@@ -50,7 +51,6 @@ class UnitDefinition:
         self.metaid = metaid
         self.units = units
 
-
 class Parameter:
     def __init__(self, id, name, metaid, units, value):
         self.id = id
@@ -64,8 +64,7 @@ class Event:
         self.id = id
         self.name = name
 
-import xml.etree.ElementTree as ET
-
+# Function to parse SBML file
 def parse_sbml(sbml_file):
     reader = libsbml.SBMLReader()
     document = reader.readSBML(sbml_file)
@@ -96,7 +95,6 @@ def parse_sbml(sbml_file):
         'model_metadata': None
     }
 
-
     for i in range(model.getNumCompartments()):
         compartment = model.getCompartment(i)
         model_data['compartments'].append(Compartment(compartment.getId(), compartment.getName(), compartment.getSize()))
@@ -124,7 +122,6 @@ def parse_sbml(sbml_file):
             unit_definition.getMetaId(),
             units
         ))
-
 
     for i in range(model.getNumReactions()):
         reaction = model.getReaction(i)
@@ -170,116 +167,98 @@ def parse_sbml(sbml_file):
 
     return model_data, None
 
-def run_simulation(request):
-    if request.method == 'POST':
-        try:
-            # Get the list of files in the current directory
-            files_in_current_folder = os.listdir()
+# Endpoint to run simulation
+import json
 
-            # Filter SBML files
+class RunSimulation(APIView):
+    def post(self, request, format=None):
+        try:
+            files_in_current_folder = os.listdir()
             sbml_files = [file for file in files_in_current_folder if file.endswith('.xml')]
 
             if not sbml_files:
                 return JsonResponse({'success': False, 'message': 'No SBML files found in the current directory.'})
 
-            # Assuming there's only one SBML file in the current directory
             sbml_file = sbml_files[0]
-
-            # Construct the file path
             sbml_file_path = os.path.join(os.getcwd(), sbml_file)
-
-            # Load SBML model using RoadRunner
             rr = roadrunner.RoadRunner(sbml_file_path)
-
-            # Simulate the modelhttp://127.0.0.1:8000/undefined
             results = rr.simulate(0, 2000, 200)
-
-            # Convert NamedArray to a list of dictionaries
             simulation_data = []
             for i in range(len(results)):
                 simulation_data.append(dict(zip(results.colnames, results[i])))
 
-            # Generate plot
             plt.figure(figsize=(10, 6))
             plt.plot(results[:, 0], results[:, 1:], label=results.colnames[1:])
             plt.xlabel('Time')
             plt.ylabel('Concentration')
             plt.legend()
-            
-            # Generate a random filename for the plot image
+
             random_filename = str(uuid.uuid4()) + '.png'
             plot_path = os.path.join(settings.MEDIA_ROOT, random_filename)
-            
-            # Save the plot to the random filename
             plt.savefig(plot_path)
+            plt.close()  # Close the plot to prevent memory leaks
 
-            # Construct the URL for the plot image
-            plot_image_url = static(random_filename)
+            plot_image_url = os.path.join(settings.MEDIA_URL, random_filename)
 
-            # Return simulation data and plot image URL as JSON response
             return JsonResponse({'success': True, 'simulation_data': simulation_data, 'plot_url': plot_image_url})
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)})
 
-    # Handle GET requests or other HTTP methods
-    return JsonResponse({'success': False, 'message': 'Invalid request method'})
-
-def view_sbml(request):
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    sbml_files = glob.glob(os.path.join(base_dir, '*.xml'))
-
-    if sbml_files:
-        sbml_file = sbml_files[0]
-    else:
-        return render(request, 'error.html', {'error_message': "No SBML files found in the directory."})
-
-    model_data, errors = parse_sbml(sbml_file)
-
-    if errors:
-        return render(request, 'error.html', {'error_message': errors})
-
-    return render(request, 'view_sbml.html', {'model_data': model_data})
 
 
-def update_parameters(request):
-    if request.method == 'POST':
+# Endpoint to view SBML
+class ViewSBML(APIView):
+    def get(self, request, format=None):
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sbml_files = glob.glob(os.path.join(base_dir, '*.xml'))
 
         if sbml_files:
             sbml_file = sbml_files[0]
         else:
-            return JsonResponse({'success': False, 'message': 'No SBML files found in the directory.'})
+            return render(request, 'error.html', {'error_message': "No SBML files found in the directory."})
 
-        reader = libsbml.SBMLReader()
-        document = reader.readSBML(sbml_file)
+        model_data, errors = parse_sbml(sbml_file)
 
-        if document.getNumErrors() > 0:
-            errors = document.getErrorLog().toString()
-            return JsonResponse({'success': False, 'message': errors})
+        if errors:
+            return render(request, 'error.html', {'error_message': errors})
 
-        model = document.getModel()
-
-        if model is None:
-            return JsonResponse({'success': False, 'message': 'No model found in the SBML file.'})
-
-        for i in range(model.getNumParameters()):
-            parameter_id = model.getParameter(i).getId()
-            new_value = float(request.POST.get(parameter_id))
-            model.getParameter(i).setValue(new_value)
-
-        # Write the updated model to the same file
-        writer = libsbml.SBMLWriter()
-        writer.writeSBMLToFile(document, sbml_file)
-
-        # Return success response
-        return JsonResponse({'success': True, 'message': 'Parameters updated successfully.'})
-    else:
-        # Handle GET request if needed
-        return JsonResponse({'success': False, 'message': 'Invalid request method.'})
+        return render(request, 'view_sbml.html', {'model_data': model_data})
 
 
+# Endpoint to update parameters
+class UpdateParameters(APIView):
+    def post(self, request, format=None):
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            sbml_files = glob.glob(os.path.join(base_dir, '*.xml'))
 
+            if not sbml_files:
+                return JsonResponse({'success': False, 'message': 'No SBML files found in the directory.'})
 
+            sbml_file = sbml_files[0]
 
+            reader = libsbml.SBMLReader()
+            document = reader.readSBML(sbml_file)
 
+            if document.getNumErrors() > 0:
+                errors = document.getErrorLog().toString()
+                return JsonResponse({'success': False, 'message': errors})
+
+            model = document.getModel()
+
+            if model is None:
+                return JsonResponse({'success': False, 'message': 'No model found in the SBML file.'})
+
+            for i in range(model.getNumParameters()):
+                parameter_id = model.getParameter(i).getId()
+                new_value_str = request.POST.get(parameter_id)
+                if new_value_str is not None:
+                    new_value = float(new_value_str)
+                    model.getParameter(i).setValue(new_value)
+
+            writer = libsbml.SBMLWriter()
+            writer.writeSBMLToFile(document, sbml_file)
+
+            return JsonResponse({'success': True, 'message': 'Parameters updated successfully.'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
