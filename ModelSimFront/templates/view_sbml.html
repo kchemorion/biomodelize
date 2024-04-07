@@ -15,6 +15,27 @@
         .align-left {
             text-align: left;
         }
+        .input-field {
+            margin-bottom: 20px; /* Adjust as needed */
+        }
+        #loader {
+            display: none; /* Hide loader by default */
+            position: fixed;
+            z-index: 999;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 16px solid #f3f3f3; /* Light grey */
+            border-top: 16px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 120px;
+            height: 120px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -26,9 +47,8 @@
             <li class="tab"><a href="#compartments">Compartments</a></li>
             <li class="tab"><a href="#reactions">Reactions</a></li>
             <li class="tab"><a href="#parameters">Parameters</a></li>
-            <li class="tab"><a href="#visualize">Visualize</a></li>
         </ul>
-
+        <div id="loader"></div>
         <div class="row">
             <div id="model_overview" class="col s12">
                 <!-- Content for Model Overview -->
@@ -43,10 +63,9 @@
 
                 <ul class="collapsible">
                     <li>
-
                         <div class="collapsible-body">
                             <li>
- <pre>{{ model_data.model_metadata }}</pre>
+                                <pre>{{ model_data.model_metadata }}</pre>
                             </li>
                         </div>
                     </li>
@@ -157,8 +176,33 @@
                     </table>
                     <br>
                     <button type="submit" id="update_parameters_button" class="btn waves-effect waves-light">Update Parameters</button>
+                    <div class="input-field col s6">
+                        <input type="number" id="execution_start" name="execution_start" class="validate">
+                        <label for="execution_start">Execution Start (ms)</label>
+                    </div>
+                    <div class="input-field col s6">
+                        <input type="number" id="execution_end" name="execution_end" class="validate">
+                        <label for="execution_end">Execution End (ms)</label>
+                    </div>
+                    <div class="input-field col s6">
+                        <input type="number" id="execution_steps" name="execution_steps" class="validate">
+                        <label for="execution_steps">Execution Steps</label>
+                    </div>
+                    <button type="button" id="simulate_button" class="btn waves-effect waves-light modal-trigger" data-target="simulation-modal">Run Simulation</button>
                 </form><br>
                 
+                <!-- Modal Structure -->
+                <div id="simulation-modal" class="modal">
+                    <div class="modal-content">
+                        <h4>Simulation Results</h4>
+                        <div id="plot-container"></div> 
+                        <div id="simulation-results"></div>
+                        <!-- Add this line for the plot container -->
+                        <a id="download-results" href="#" download>Download Results</a>
+                    </div>
+                </div>
+                
+
                 <script>
                     document.getElementById("update_parameters_form").addEventListener("submit", function(event) {
                         event.preventDefault(); // Prevent default form submission
@@ -184,82 +228,81 @@
                             alert("An error occurred while updating parameters.");
                         });
                     });
-                    </script>
                     
-                
-                
-            </div>
+                    document.getElementById("simulate_button").addEventListener("click", function() {
+    // Display loader
+    document.getElementById("loader").style.display = "block";
 
+    // Get simulation parameters from user input
+    var simulationParameters = {
+        start: 0,
+        end: 2000,
+        steps: 200
+    };
 
+    // Add your simulation logic here
+    fetch("{% url 'run_simulation' %}", {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": getCookie("csrftoken")  // Include CSRF token
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Hide loader after simulation is done
+            document.getElementById("loader").style.display = "none";
 
-            <div id="visualize" class="col s12">
-                <!-- Content for Visualize -->
-                <h4>Visualize</h4>
-                <form id="solver_form" method="post">
-                    <div>
-                        <label>Select Solver:</label>
-                        <br>
-                        <input type="radio" id="euler" name="solver" value="euler">
-                        <label for="euler">Euler</label>
-                        <br>
-                        <input type="radio" id="runge_kutta" name="solver" value="runge_kutta">
-                        <label for="runge_kutta">Runge-Kutta</label>
-                        <br>
-                        <input type="radio" id="tellurium" name="solver" value="tellurium">
-                        <label for="tellurium">Tellurium</label>
-                        <!-- Add more solver options here if needed -->
-                    </div>
-                    <br>
-                    <div>
-                        <button type="submit" id="visualize_button" class="btn waves-effect waves-light">Visualize</button>
-                    </div>
-                </form>
-            </div>
-            
-            
-            
-            
-            
-            
-            
+            // Display simulation results
+            document.getElementById("simulation-results").innerHTML = JSON.stringify(data.simulation_data);
 
-<script>
-    document.getElementById("solver_form").addEventListener("submit", function(event) {
-        event.preventDefault(); // Prevent default form submission
+            // Display the plot image
+            var plotImage = document.createElement("img");
+            // Construct the URL for the plot image saved in the media folder
+            plotImage.src = "/media/" + data.plot_url.split("/").pop();  // Remove any leading slashes
+            document.getElementById("plot-container").appendChild(plotImage);
 
-        // Get the selected solver from the dropdown menu
-        var selectedSolver = document.getElementById("solver_select").value;
+            // Update download link
+            var downloadLink = document.getElementById("download-results");
+            downloadLink.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data.simulation_data));
 
-        // Send AJAX request to the Django view
-        fetch("{% url 'visualize_data' %}", {
-            method: "POST",
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}', // Include CSRF token in headers
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({solver: selectedSolver}) // Send selected solver to the backend
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Process visualization data and display it on the frontend
-                alert("Visualization data received."); // Placeholder alert message
-            } else {
-                alert("Error: " + data.message); // Show error message
-            }
-        })
-        .catch(error => {
-            console.error("Error:", error);
-            alert("An error occurred while visualizing data.");
-        });
+            // Initialize modal
+            var modalElem = document.getElementById("simulation-modal");
+            var modalInstance = M.Modal.init(modalElem);
+            // Open modal after initializing
+            modalInstance.open();
+        } else {
+            console.error("Error:", data.message);
+            alert("An error occurred while running the simulation.");
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        alert("An error occurred while running the simulation.");
     });
-</script>
-
-    
+});
 
 
 
+        // Function to get CSRF token from cookies
+        function getCookie(name) {
+            var cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                var cookies = document.cookie.split(';');
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+                    // Check if the cookie contains the CSRF token
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
 
+                </script>
+            </div>
         </div>
     </div>
 
@@ -288,11 +331,7 @@
             M.Collapsible.init(collapsibles);
         });
     </script>
-    <style>
-        .input-field {
-    margin-bottom: 20px; /* Adjust as needed */
-}
+    
 
-    </style>
 </body>
 </html>

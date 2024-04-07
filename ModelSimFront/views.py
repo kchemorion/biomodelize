@@ -6,6 +6,13 @@ import glob
 import libsbml
 from django.shortcuts import render
 from django.http import JsonResponse
+import roadrunner
+import matplotlib.pyplot as plt
+import tempfile
+import uuid
+from django.conf import settings
+from django.templatetags.static import static 
+
 
 class Compartment:
     def __init__(self, id, name, size):
@@ -138,7 +145,6 @@ def parse_sbml(sbml_file):
             equation
     ))
 
-
     for i in range(model.getNumParameters()):
         parameter = model.getParameter(i)
         model_data['parameters'].append(Parameter(
@@ -164,6 +170,59 @@ def parse_sbml(sbml_file):
 
     return model_data, None
 
+def run_simulation(request):
+    if request.method == 'POST':
+        try:
+            # Get the list of files in the current directory
+            files_in_current_folder = os.listdir()
+
+            # Filter SBML files
+            sbml_files = [file for file in files_in_current_folder if file.endswith('.xml')]
+
+            if not sbml_files:
+                return JsonResponse({'success': False, 'message': 'No SBML files found in the current directory.'})
+
+            # Assuming there's only one SBML file in the current directory
+            sbml_file = sbml_files[0]
+
+            # Construct the file path
+            sbml_file_path = os.path.join(os.getcwd(), sbml_file)
+
+            # Load SBML model using RoadRunner
+            rr = roadrunner.RoadRunner(sbml_file_path)
+
+            # Simulate the modelhttp://127.0.0.1:8000/undefined
+            results = rr.simulate(0, 2000, 200)
+
+            # Convert NamedArray to a list of dictionaries
+            simulation_data = []
+            for i in range(len(results)):
+                simulation_data.append(dict(zip(results.colnames, results[i])))
+
+            # Generate plot
+            plt.figure(figsize=(10, 6))
+            plt.plot(results[:, 0], results[:, 1:], label=results.colnames[1:])
+            plt.xlabel('Time')
+            plt.ylabel('Concentration')
+            plt.legend()
+            
+            # Generate a random filename for the plot image
+            random_filename = str(uuid.uuid4()) + '.png'
+            plot_path = os.path.join(settings.MEDIA_ROOT, random_filename)
+            
+            # Save the plot to the random filename
+            plt.savefig(plot_path)
+
+            # Construct the URL for the plot image
+            plot_image_url = static(random_filename)
+
+            # Return simulation data and plot image URL as JSON response
+            return JsonResponse({'success': True, 'simulation_data': simulation_data, 'plot_url': plot_image_url})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
+
+    # Handle GET requests or other HTTP methods
+    return JsonResponse({'success': False, 'message': 'Invalid request method'})
 
 def view_sbml(request):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -173,7 +232,7 @@ def view_sbml(request):
         sbml_file = sbml_files[0]
     else:
         return render(request, 'error.html', {'error_message': "No SBML files found in the directory."})
-    
+
     model_data, errors = parse_sbml(sbml_file)
 
     if errors:
@@ -219,28 +278,8 @@ def update_parameters(request):
         # Handle GET request if needed
         return JsonResponse({'success': False, 'message': 'Invalid request method.'})
 
-from django.http import JsonResponse
 
-def visualize_data(request):
-    if request.method == 'POST':
-        solver = request.POST.get('solver')
-        # Perform actions based on the selected solver
-        # Example: Run Tellurium simulation with the selected solver
-        if solver == 'euler':
-            # Run simulation using Euler solver
-            simulation_result = run_euler_simulation()
-        elif solver == 'runge_kutta':
-            # Run simulation using Runge-Kutta solver
-            simulation_result = run_runge_kutta_simulation()
-        else:
-            # Handle unsupported solver
-            return JsonResponse({'success': False, 'message': 'Unsupported solver'})
 
-        # Process simulation result and prepare visualization data
-        visualization_data = process_simulation_result(simulation_result)
 
-        # Return visualization data as JSON response
-        return JsonResponse({'success': True, 'data': visualization_data})
 
-    # Handle GET requests or other HTTP methods
-    return JsonResponse({'success': False, 'message': 'Invalid request method'})
+

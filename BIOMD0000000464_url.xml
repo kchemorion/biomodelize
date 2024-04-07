@@ -737,8 +737,8 @@
       <parameter metaid="K_CICR" id="K_CICR" name="K_CICR" value="0" units="substance"/>
       <parameter metaid="k_CCE" id="k_CCE" name="k_CCE" value="0" units="inv_sec_sub"/>
       <parameter metaid="B_T" id="B_T" name="B_T" value="120000" units="substance"/>
-      <parameter metaid="dot_Vp" id="dot_Vp" name="dot_Vp" value="815" units="sub_sec"/>
-      <parameter metaid="dot_Vex" id="dot_Vex" name="dot_Vex" value="9165" units="sub_sec"/>
+      <parameter metaid="dot_Vp" id="dot_Vp" name="dot_Vp" value="815.1" units="sub_sec"/>
+      <parameter metaid="dot_Vex" id="dot_Vex" name="dot_Vex" value="91990" units="sub_sec"/>
       <parameter metaid="dot_Vhi" id="dot_Vhi" name="dot_Vhi" value="2380" units="sub_sec"/>
       <parameter metaid="dot_q_inpass" id="dot_q_inpass" name="dot_q_inpass" value="3000" units="sub_sec"/>
       <parameter metaid="Cao" id="Cao" name="Cao" value="100" units="substance"/>
