@@ -36,6 +36,22 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .model-info {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .model-info .info {
+            flex: 1;
+        }
+        .model-info .reaction-graph {
+            flex: 1;
+            text-align: center;
+        }
+        .reaction-graph img {
+            max-width: 300%;
+        }
     </style>
 </head>
 <body>
@@ -52,11 +68,20 @@
         <div id="loader"></div>
         <div class="row">
             <div id="model_overview" class="col s12">
-                <!-- Content for Model Overview -->
-                <p>Model ID: {{ model_data.model_id }}</p>
-                <p>Model Name: {{ model_data.model_name }}</p>
-                <p>Number of Compartments: {{ model_data.num_compartments }}</p>
-                <p>Number of Species: {{ model_data.num_species }}</p>
+                <!-- Container for model information and reaction graph -->
+                <div class="model-info" style="width: 50%;">
+                    <!-- Content for Model Overview -->
+                    <div class="info" >
+                        <p>Model ID: {{ model_data.model_id }}</p>
+                        <p>Model Name: {{ model_data.model_name }}</p>
+                        <p>Number of Compartments: {{ model_data.num_compartments }}</p>
+                        <p>Number of Species: {{ model_data.num_species }}</p>
+                    </div>
+                    <!-- Reaction graph image -->
+                    <div class="reaction-graph">
+                        <img src="{{ reaction_graph_url }}" alt="Reaction Graph" style="width: 270%; margin-right: 70%; ">
+                    </div>
+                </div>
             </div>
             <div id="metadata" class="col s12">
                 <!-- Content for Metadata -->
@@ -226,61 +251,58 @@
         });
 
         // Event listener for the "Run Simulation" button
-  // Event listener for the "Run Simulation" button
-  document.getElementById("simulate_button").addEventListener("click", function() {
-    // Display loader
-    document.getElementById("loader").style.display = "block";
+        document.getElementById("simulate_button").addEventListener("click", function() {
+            // Display loader
+            document.getElementById("loader").style.display = "block";
 
-    // Fetch CSRF token
-    var csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            // Fetch CSRF token
+            var csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-    // Send AJAX request to run simulation
-    fetch("/run_simulation/", {  // Update the URL to match your endpoint
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": csrftoken
-        },
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Hide loader
-        document.getElementById("loader").style.display = "none";
+            // Send AJAX request to run simulation
+            fetch("/run_simulation/", {  // Update the URL to match your endpoint
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrftoken
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide loader
+                document.getElementById("loader").style.display = "none";
 
-        if (data.success) {
-            // Simulation ran successfully, display results
-            document.getElementById("simulation-results").innerHTML = "<h5>Simulation Results</h5>";
-            document.getElementById("simulation-results").innerHTML += "<p>Simulation data:</p>";
-            document.getElementById("simulation-results").innerHTML += "<pre>" + JSON.stringify(data.simulation_data, null, 2) + "</pre>";
-            document.getElementById("simulation-results").innerHTML += "<p>Plot:</p>";
-            document.getElementById("plot-container").innerHTML = "<img src='" + data.plot_url + "' alt='Simulation Plot'>";
-            
-            // Create a blob containing the simulation data
-            var blob = new Blob([JSON.stringify(data.simulation_data)], { type: "application/json" });
-            var url = URL.createObjectURL(blob);
-            
-            // Update download link to download the JSON file
-            var downloadLink = document.getElementById("download-results");
-            downloadLink.setAttribute("href", url);
-            downloadLink.setAttribute("download", "simulation_results.json");
-            downloadLink.style.display = "block";
-        } else {
-            // Simulation failed, display error message
-            alert("Simulation failed: " + data.message);
-        }
-    })
-    .catch(error => {
-        console.error("Error:", error);
-        alert("An error occurred while running the simulation.");
-    });
-});
+                if (data.success) {
+                    // Simulation ran successfully, display results
+                    document.getElementById("simulation-results").innerHTML = "<h5>Simulation Results</h5>";
+                    document.getElementById("simulation-results").innerHTML += "<p>Simulation data:</p>";
+                    document.getElementById("simulation-results").innerHTML += "<pre>" + JSON.stringify(data.simulation_data, null, 2) + "</pre>";
+                    document.getElementById("simulation-results").innerHTML += "<p>Plot:</p>";
+                    document.getElementById("plot-container").innerHTML = "<img src='" + data.plot_url + "' alt='Simulation Plot'>";
+                    
+                    // Create a blob containing the simulation data
+                    var blob = new Blob([JSON.stringify(data.simulation_data)], { type: "application/json" });
+                    var url = URL.createObjectURL(blob);
+                    
+                    // Update download link to download the JSON file
+                    var downloadLink = document.getElementById("download-results");
+                    downloadLink.setAttribute("href", url);
+                    downloadLink.setAttribute("download", "simulation_results.json");
+                    downloadLink.style.display = "block";
+                } else {
+                    // Simulation failed, display error message
+                    alert("Simulation failed: " + data.message);
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("An error occurred while running the simulation.");
+            });
+        });
 
-
-document.addEventListener('DOMContentLoaded', function() {
-    var modals = document.querySelectorAll('.modal');
-    M.Modal.init(modals);
-});
-
+        document.addEventListener('DOMContentLoaded', function() {
+            var modals = document.querySelectorAll('.modal');
+            M.Modal.init(modals);
+        });
 
         // Event listener for the "Update Parameters" form
         document.getElementById("update_parameters_form").addEventListener("submit", function(event) {

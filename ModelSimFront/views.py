@@ -1,19 +1,15 @@
 from django.http import JsonResponse
 from django.shortcuts import render
-from django.conf import settings
-from django.templatetags.static import static
 from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-import libsbml
 import os
 import glob
-import roadrunner
+import pandas as pd
+import networkx as nx
 import matplotlib.pyplot as plt
-import tempfile
-import uuid
-import xml.etree.ElementTree as ET
 from django.conf import settings
+import libsbml
+import roadrunner
+import uuid
 
 # Define model classes (Compartment, Species, Reaction, UnitDefinition, Parameter, Event)
 class Compartment:
@@ -167,44 +163,56 @@ def parse_sbml(sbml_file):
 
     return model_data, None
 
-# Endpoint to run simulation
-import json
+# Function to draw reaction graph
+def draw_reaction_graph(filename, output_path):
+    # Read the network data from an Excel file
+    nw = pd.read_excel(filename)
+    num_of_nodes = len(nw['Nodes'])
+    node_names = nw['Nodes'].tolist()
 
-class RunSimulation(APIView):
-    def post(self, request, format=None):
-        try:
-            files_in_current_folder = os.listdir()
-            sbml_files = [file for file in files_in_current_folder if file.endswith('.xml')]
+    # Initialize a directed graph
+    G = nx.DiGraph()
 
-            if not sbml_files:
-                return JsonResponse({'success': False, 'message': 'No SBML files found in the current directory.'})
+    # Add nodes
+    for node in node_names:
+        G.add_node(node)
 
-            sbml_file = sbml_files[0]
-            sbml_file_path = os.path.join(os.getcwd(), sbml_file)
-            rr = roadrunner.RoadRunner(sbml_file_path)
-            results = rr.simulate(0, 2000, 200)
-            simulation_data = []
-            for i in range(len(results)):
-                simulation_data.append(dict(zip(results.colnames, results[i])))
+    # Add edges for activation and inhibition
+    for i in range(num_of_nodes):
+        activators = str(nw['Activators'][i]).split(',')
+        inhibitors = str(nw['Inhibitors'][i]).split(',')
 
-            plt.figure(figsize=(10, 6))
-            plt.plot(results[:, 0], results[:, 1:], label=results.colnames[1:])
-            plt.xlabel('Time')
-            plt.ylabel('Concentration')
-            plt.legend()
+        # Clean the node names from spaces and check if they are not NaN
+        activators = [act.strip() for act in activators if act.strip() in node_names]
+        inhibitors = [inh.strip() for inh in inhibitors if inh.strip() in node_names]
 
-            random_filename = str(uuid.uuid4()) + '.png'
-            plot_path = os.path.join(settings.MEDIA_ROOT, random_filename)
-            plt.savefig(plot_path)
-            plt.close()  # Close the plot to prevent memory leaks
+        current_node = node_names[i]
 
-            plot_image_url = os.path.join(settings.MEDIA_URL, random_filename)
+        # Add edges for each activator
+        for act in activators:
+            if act:  # Check to make sure 'act' is not an empty string
+                G.add_edge(act, current_node, color='green', relationship='activates')
 
-            return JsonResponse({'success': True, 'simulation_data': simulation_data, 'plot_url': plot_image_url})
-        except Exception as e:
-            return JsonResponse({'success': False, 'message': str(e)})
+        # Add edges for each inhibitor
+        for inh in inhibitors:
+            if inh:  # Check to make sure 'inh' is not an empty string
+                G.add_edge(inh, current_node, color='red', relationship='inhibits')
 
+    # Use a different layout to spread nodes more effectively
+    pos = nx.kamada_kawai_layout(G)  # You can also try nx.circular_layout or nx.fruchterman_reingold_layout
 
+    # Draw the graph
+    plt.figure(figsize=(24, 24))  # Increase figure size
+    edges = G.edges(data=True)
+    colors = [data['color'] for u, v, data in edges]
+    nx.draw(G, pos, edge_color=colors, with_labels=True, node_color='lightblue', node_size=3000, font_size=12)  # Adjust node size and font size
+    edge_labels = dict([((u, v,), d['relationship'])
+                        for u, v, d in G.edges(data=True)])
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='blue')  # Adjust font color for visibility
+
+    plt.title('Reaction Graph from Network Data')
+    plt.savefig(output_path)  # Save as a larger image
+    plt.close()
 
 # Endpoint to view SBML
 class ViewSBML(APIView):
@@ -222,8 +230,76 @@ class ViewSBML(APIView):
         if errors:
             return render(request, 'error.html', {'error_message': errors})
 
-        return render(request, 'view_sbml.html', {'model_data': model_data})
+        # Generate the reaction graph image
+        network_data_file = os.path.join(base_dir, 'CRT.xlsx')  # Ensure this path is correct
+        output_path = os.path.join(settings.MEDIA_ROOT, 'reaction_graph.png')
+        draw_reaction_graph(network_data_file, output_path)
+        reaction_graph_url = os.path.join(settings.MEDIA_URL, 'reaction_graph.png')
 
+        return render(request, 'view_sbml.html', {'model_data': model_data, 'reaction_graph_url': reaction_graph_url})
+
+# Endpoint to run simulation
+import json
+
+class RunSimulation(APIView):
+    def post(self, request, format=None):
+        try:
+            files_in_current_folder = os.listdir()
+            sbml_files = [file for file in files_in_current_folder if file.endswith('.xml')]
+
+            if not sbml_files:
+                return JsonResponse({'success': False, 'message': 'No SBML files found in the current directory.'})
+
+            sbml_file = sbml_files[0]
+            sbml_file_path = os.path.join(os.getcwd(), sbml_file)
+            rr = roadrunner.RoadRunner(sbml_file_path)
+            results = rr.simulate(0, 30, 100)
+
+            # Define the species indices for each category
+            plot_indices = {
+                'Pro-Inflammatory': [0, 1, 2],
+                'Anti-Inflammatory': [3],
+                'Growth factors': [9],
+                'ECM Destruction': [0, 1],
+                'ECM Synthesis': [2],
+                'Hypertrophy': [49]
+            }
+
+            # Create subplots for each category
+            num_categories = len(plot_indices)
+            fig, axes = plt.subplots(num_categories, 1, figsize=(10, 2 * num_categories), sharex=True)
+
+            if num_categories == 1:
+                axes = [axes]  # Ensure axes is iterable when there's only one subplot
+
+            for ax, (category, indices) in zip(axes, plot_indices.items()):
+                indices_to_plot = [i + 1 for i in indices]  # +1 because the first column is time
+                filtered_results = results[:, [0] + indices_to_plot]
+                filtered_colnames = [results.colnames[0]] + [results.colnames[i + 1] for i in indices]
+
+                for idx in range(1, filtered_results.shape[1]):  # Skip the first column (time)
+                    ax.plot(filtered_results[:, 0], filtered_results[:, idx], label=filtered_colnames[idx])
+
+                ax.set_title(category)
+                ax.set_ylabel('Concentration')
+                ax.legend()
+
+            plt.xlabel('Time')
+
+            random_filename = str(uuid.uuid4()) + '.png'
+            plot_path = os.path.join(settings.MEDIA_ROOT, random_filename)
+            plt.savefig(plot_path)
+            plt.close()  # Close the plot to prevent memory leaks
+
+            plot_image_url = os.path.join(settings.MEDIA_URL, random_filename)
+
+            simulation_data = []
+            for i in range(len(results)):
+                simulation_data.append(dict(zip(results.colnames, results[i])))
+
+            return JsonResponse({'success': True, 'simulation_data': simulation_data, 'plot_url': plot_image_url})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
 
 # Endpoint to update parameters
 class UpdateParameters(APIView):
@@ -262,3 +338,4 @@ class UpdateParameters(APIView):
             return JsonResponse({'success': True, 'message': 'Parameters updated successfully.'})
         except Exception as e:
             return JsonResponse({'success': False, 'message': str(e)})
+
